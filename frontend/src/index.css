@@ -1,3 +1,12 @@
+@import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;500&family=Playfair+Display:wght@600;700&family=Poppins:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+body {
+  margin: 0;
+  background-color: #1E1E24;
+  color: #FFFFFF;
+  font-family: 'Poppins', system-ui, sans-serif;
+}

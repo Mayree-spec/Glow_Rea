@@ -1,25 +1,85 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { Pool } = require('pg');
+const { PrismaClient } = require('@prisma/client');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const app = express();
+const prisma = new PrismaClient();
+
 app.use(cors());
 app.use(express.json());
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
+// Base Route
+app.get('/', (req, res) => {
+  res.send('GLOW_REA API Server Running');
 });
 
-app.get('/', (req, res) => res.send('Backend is running'));
-
-app.get('/api/db-test', async (req, res) => {
+// Register Endpoint
+app.post('/auth/register', async (req, res) => {
   try {
-    const result = await pool.query('SELECT NOW()');
-    res.json({ connected: true, time: result.rows[0].now });
+    const { name, email, password, role } = req.body;
+    
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ error: 'Email already exists' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({
+      data: { 
+        name, 
+        email, 
+        password: hashedPassword, 
+        role: role || 'READER' 
+      },
+    });
+
+    const token = jwt.sign(
+      { id: user.id, role: user.role }, 
+      process.env.JWT_SECRET || 'fallback_secret', 
+      { expiresIn: '7d' }
+    );
+    
+    res.json({ 
+      token, 
+      user: { id: user.id, name: user.name, email: user.email, role: user.role } 
+    });
   } catch (err) {
-    res.status(500).json({ connected: false, error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Failed to register user', details: err.message });
+  }
+});
+
+// Login Endpoint
+app.post('/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    
+    const user = await prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid credentials' });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ error: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, role: user.role }, 
+      process.env.JWT_SECRET || 'fallback_secret', 
+      { expiresIn: '7d' }
+    );
+    
+    res.json({ 
+      token, 
+      user: { id: user.id, name: user.name, email: user.email, role: user.role } 
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to log in', details: err.message });
   }
 });
 
